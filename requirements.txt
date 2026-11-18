@@ -1,0 +1,4 @@
+pandas>=2.0
+confluent-kafka>=2.4
+cassandra-driver>=3.29.2
+pytest>=8.0

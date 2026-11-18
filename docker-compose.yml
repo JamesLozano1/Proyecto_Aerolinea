@@ -1,0 +1,86 @@
+# Reto 7 - Propagación de retrasos en la red aérea
+# Levanta los componentes locales: Kafka (KRaft), Cassandra, Neo4j (+GDS) y Spark.
+# S3 y BigQuery/Snowflake son servicios en la nube (ver carpeta analitica/).
+services:
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: reto7-kafka
+    ports:
+      - "9092:9092"   # acceso desde tu máquina (productor / consumidor en Python)
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,INTERNAL://:29092,CONTROLLER://:9093
+      # localhost:9092 para tu máquina; kafka:29092 para otros contenedores (p. ej. Spark)
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+  cassandra:
+    image: cassandra:4.1
+    container_name: reto7-cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      CASSANDRA_CLUSTER_NAME: reto7
+      MAX_HEAP_SIZE: 1G
+      HEAP_NEWSIZE: 256M
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
+      interval: 20s
+      timeout: 15s
+      retries: 10
+      start_period: 60s
+
+  neo4j:
+    image: neo4j:5.26-community
+    container_name: reto7-neo4j
+    ports:
+      - "7474:7474"   # navegador web
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-reto7password}
+      NEO4J_PLUGINS: '["graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: "gds.*"
+      NEO4J_server_memory_heap_max__size: 1G
+    volumes:
+      - neo4j_data:/data
+      - ./data/openflights:/import/openflights:ro
+
+  spark-master:
+    image: apache/spark:3.5.3
+    container_name: reto7-spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    ports:
+      - "8080:8080"   # UI de Spark
+      - "7077:7077"
+    volumes:
+      - ./spark:/opt/app/spark
+      - ./data:/data
+
+  spark-worker:
+    image: apache/spark:3.5.3
+    container_name: reto7-spark-worker
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 2g
+    volumes:
+      - ./spark:/opt/app/spark
+      - ./data:/data
+
+volumes:
+  kafka_data:
+  cassandra_data:
+  neo4j_data:

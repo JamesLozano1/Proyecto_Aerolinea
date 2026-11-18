@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/bts/
+data/openflights/*.dat
+*.zip
+.pytest_cache/
