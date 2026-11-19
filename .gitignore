@@ -7,3 +7,5 @@ data/bts/
 data/openflights/*.dat
 *.zip
 .pytest_cache/
+data/salida/
+data/grafo/

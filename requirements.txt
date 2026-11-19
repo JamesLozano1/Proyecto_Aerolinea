@@ -2,3 +2,5 @@ pandas>=2.0
 confluent-kafka>=2.4
 cassandra-driver>=3.29.2
 pytest>=8.0
+pyasyncore; python_version >= "3.12"
+networkx>=3.2

@@ -57,7 +57,7 @@ services:
       - ./data/openflights:/import/openflights:ro
 
   spark-master:
-    image: apache/spark:3.5.3
+    image: apache/spark:3.5.3-scala2.12-java17-python3-ubuntu
     container_name: reto7-spark-master
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
     ports:
@@ -68,7 +68,7 @@ services:
       - ./data:/data
 
   spark-worker:
-    image: apache/spark:3.5.3
+    image: apache/spark:3.5.3-scala2.12-java17-python3-ubuntu
     container_name: reto7-spark-worker
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
     depends_on:

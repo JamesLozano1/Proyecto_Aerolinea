@@ -30,7 +30,7 @@ CSV BTS ──► productor Kafka ──► tópico flight-events ──► cons
 ## Estado
 - [x] Fase 1: Kafka + Cassandra (ingesta, modelo, consultas)
 - [x] Fase 2: Spark — herencia de retraso (`spark/herencia_retraso.py`)
-- [ ] Fase 3: Neo4j — grafo y centralidad
+- [~] Fase 3: grafo — prototipo en NetworkX listo (`grafo/`); falta cargarlo y repetirlo en Neo4j
 - [ ] Fase 4: S3 + BigQuery/Snowflake
 
 ## Requisitos
@@ -81,6 +81,19 @@ Método: se ordena cada matrícula por hora programada de salida en UTC y se une
 (`lag`). Retraso heredado = min(retraso de salida, max(0, retraso de llegada anterior − holgura)), con
 holgura = tiempo programado en tierra − 30 min. Se contrasta con `LateAircraftDelay` de BTS.
 Limitación: el mínimo de 30 min en tierra es un supuesto (parámetro `--turnaround-minimo`).
+
+## Fase 3 — Grafo de aeropuertos (sin Docker)
+```powershell
+pip install -r requirements.txt
+python -m grafo.preparar_grafo --archivos "data/bts/2026/*.csv"
+python -m grafo.analisis_grafo --top 10
+```
+`preparar_grafo` resume los CSV en `data/grafo/nodos.csv` y `aristas.csv` (aeropuertos y rutas con vuelos y retraso
+promedio). `analisis_grafo` calcula PageRank (ponderado por vuelos), intermediación, el efecto de cerrar cada uno de
+los aeropuertos más importantes y las rutas alternativas sin la ruta directa. Salida en `data/salida/grafo/`.
+Al interpretar el cierre, mira siempre `pares_perdidos`: los saltos promedio pueden bajar porque solo quedan los
+pares cercanos que siguen conectados.
+Estos resultados sirven para validar lo que luego calcule Neo4j con Graph Data Science.
 
 ## Modelo de Cassandra (derivado de las consultas)
 | Consulta | Tabla | Partición | Clustering |
