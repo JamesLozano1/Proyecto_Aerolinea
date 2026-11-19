@@ -29,7 +29,7 @@ CSV BTS ──► productor Kafka ──► tópico flight-events ──► cons
 
 ## Estado
 - [x] Fase 1: Kafka + Cassandra (ingesta, modelo, consultas)
-- [ ] Fase 2: Spark — herencia de retraso
+- [x] Fase 2: Spark — herencia de retraso (`spark/herencia_retraso.py`)
 - [ ] Fase 3: Neo4j — grafo y centralidad
 - [ ] Fase 4: S3 + BigQuery/Snowflake
 
@@ -68,6 +68,19 @@ docker cp cassandra/consultas.cql reto7-cassandra:/consultas.cql
 docker exec reto7-cassandra cqlsh -f /consultas.cql
 ```
 Para la carga completa quita `--max-filas`.
+
+## Fase 2 — Spark: herencia de retraso
+```powershell
+docker compose up -d spark-master spark-worker
+docker exec reto7-spark-master /opt/spark/bin/spark-submit --master local[2] --driver-memory 2g /opt/app/spark/herencia_retraso.py --entrada "/data/bts/2026/ENERO.csv" --aeropuertos /data/openflights/airports.dat --salida /data/salida
+```
+Para los 8 meses usa `--entrada "/data/bts/2026/*.csv"`. Resultados en `data/salida/resumenes/` (CSV) y
+`data/salida/vuelos_enriquecidos/` (Parquet particionado por mes, listo para subir a S3).
+
+Método: se ordena cada matrícula por hora programada de salida en UTC y se une cada tramo con el anterior
+(`lag`). Retraso heredado = min(retraso de salida, max(0, retraso de llegada anterior − holgura)), con
+holgura = tiempo programado en tierra − 30 min. Se contrasta con `LateAircraftDelay` de BTS.
+Limitación: el mínimo de 30 min en tierra es un supuesto (parámetro `--turnaround-minimo`).
 
 ## Modelo de Cassandra (derivado de las consultas)
 | Consulta | Tabla | Partición | Clustering |
