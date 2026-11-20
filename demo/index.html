@@ -1,0 +1,147 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reto 7 · Demo</title>
+<style>
+:root{--n:#0B2545;--t:#13A89E;--o:#F28F3B;--g:#44546A;--l:#F4F7FA;--r:#d64545}
+*{box-sizing:border-box}body{margin:0;font:18px/1.4 "Segoe UI",Calibri,sans-serif;background:var(--l);color:var(--n)}
+header{background:var(--n);color:#fff;padding:12px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+h1{font-size:24px;margin:0;flex:1}main{padding:16px 24px;max-width:1300px;margin:auto}
+button{font:inherit;font-weight:600;background:var(--t);color:#fff;border:0;border-radius:8px;padding:8px 18px;cursor:pointer}
+button.sec{background:#fff;color:var(--n);border:2px solid var(--n)}button:disabled{opacity:.5;cursor:wait}
+#chips{display:flex;gap:10px;flex-wrap:wrap;padding:12px 24px;background:#fff;border-bottom:1px solid #d5dde6}
+.chip{border-radius:10px;padding:6px 12px;border:2px solid #aab;min-width:150px}.chip b{display:block}.chip small{font-size:13px;color:var(--g)}
+.chip.ok{border-color:var(--t);background:#e6f7f5}.chip.bad{border-color:var(--r);background:#fdecec}.chip.wait{opacity:.6}
+nav{display:flex;gap:8px;margin-bottom:14px}nav button{background:#fff;color:var(--n);border:2px solid var(--n)}nav button.on{background:var(--n);color:#fff}
+section{display:none}section.on{display:block}
+.pipe{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:12px 0}
+.nodo{flex:1;min-width:150px;background:#fff;border:3px solid #c5cfdb;border-radius:12px;padding:10px;text-align:center;transition:.2s}
+.nodo b{display:block;font-size:20px}.nodo span{font-size:24px;font-weight:700;color:var(--t)}.nodo small{display:block;color:var(--g);font-size:14px}
+.nodo.act{border-color:var(--o);box-shadow:0 0 0 4px #f28f3b44;animation:p 1s infinite}@keyframes p{50%{transform:scale(1.03)}}
+.fl{font-size:28px;color:var(--g)}.fl.act{color:var(--o)}
+pre,.log{background:#0d1b2a;color:#d7e3f0;border-radius:10px;padding:12px;font:15px/1.35 Consolas,monospace;overflow:auto;white-space:pre-wrap;margin:8px 0}
+.log{height:220px}
+.grid{display:grid;grid-template-columns:300px 1fr;gap:16px}
+.lista button{display:block;width:100%;text-align:left;margin:4px 0;background:#fff;color:var(--n);border:2px solid #c5cfdb}.lista button.on{border-color:var(--t);background:#e6f7f5}
+.lista h4{margin:12px 0 2px;color:var(--g)}
+.card{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px #0002}
+input{font:inherit;padding:6px 8px;border:2px solid #c5cfdb;border-radius:6px;width:130px}label{margin-right:12px;font-size:15px;color:var(--g)}
+table{border-collapse:collapse;width:100%;font-size:16px}th{background:var(--n);color:#fff;text-align:left}th,td{padding:5px 8px;border-bottom:1px solid #e1e7ee}
+.exp{border-left:5px solid var(--o);background:#fff7ef;padding:8px 12px;margin-top:10px;border-radius:6px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}.kpi{background:#fff;border-radius:12px;padding:12px;border-top:6px solid var(--t)}.kpi i{font-style:normal;font-size:34px;font-weight:700;display:block}
+.err{color:var(--r);font-weight:600}
+</style>
+<header><h1>Reto 7 · Propagación de retrasos en la red aérea</h1><button class="sec" id="bv" onclick="verificar()">Verificar servicios</button></header>
+<div id="chips"></div>
+<main>
+<nav><button class="on" onclick="tab(0)">1 · Flujo de datos</button><button onclick="tab(1)">2 · Consultas en vivo</button><button onclick="tab(2)">3 · Evidencia de escala</button></nav>
+
+<section class="on">
+ <div class="card"><label>Archivos BTS <input id="pat" style="width:230px" value="data/bts/2026/*.csv"></label>
+ <label>Filas por archivo <input id="filas" type="number" value="5000"></label>
+ <button id="bf" onclick="flujo()">Iniciar flujo</button></div>
+ <div class="pipe">
+  <div class="nodo" id="n-csv"><b>CSV BTS</b><small>origen</small></div><span class="fl" id="f1">➜</span>
+  <div class="nodo" id="n-prod"><b>Productor</b><span id="c-prod">0</span><small>eventos publicados</small></div><span class="fl" id="f2">➜</span>
+  <div class="nodo" id="n-kafka"><b>Kafka</b><span id="c-kafka">–</span><small>mensajes nuevos en flight-events</small></div><span class="fl" id="f3">➜</span>
+  <div class="nodo" id="n-cons"><b>Consumidor</b><span id="c-cons">0</span><small>eventos escritos</small></div><span class="fl" id="f4">➜</span>
+  <div class="nodo" id="n-cass"><b>Cassandra</b><span id="c-cass">–</span><small>filas en 3 tablas</small></div>
+ </div>
+ <div class="log" id="log">Pulsa “Iniciar flujo”. Los eventos son idempotentes: repetir el flujo no duplica filas en Cassandra.</div>
+ <div class="exp" id="resflujo" style="display:none"></div>
+</section>
+
+<section><div class="grid"><div class="lista" id="lista"></div><div>
+ <div class="card"><h3 id="qt" style="margin-top:0"></h3><div id="campos"></div><pre id="qtxt"></pre>
+ <button id="bq" onclick="ejecutar()">Ejecutar consulta</button> <span id="qinfo"></span>
+ <div id="res"></div><div class="exp" id="qexp"></div></div></div></div></section>
+
+<section>
+ <button onclick="escala()" id="be">Actualizar cifras</button>
+ <div class="kpis" id="kpis" style="margin:12px 0"></div>
+ <div class="card"><h3 style="margin-top:0">Tiempos de ejecución medidos en esta sesión</h3><table id="tt"><tr><th>Componente</th><th>Operación</th><th>Tiempo</th><th>Detalle</th></tr></table></div>
+ <div class="exp">Referencia del informe (medida previa): 98 900 eventos en 7,0 s (≈14 100/s) · 4 620 415 vuelos procesados con Spark en un solo equipo · 45,3 MB de Parquet en S3 (8 archivos).</div>
+</section>
+</main>
+<script>
+const $=s=>document.querySelector(s),fmt=n=>Number(n).toLocaleString("es-CO");
+function tab(i){document.querySelectorAll("section").forEach((s,j)=>s.classList.toggle("on",i==j));document.querySelectorAll("nav button").forEach((b,j)=>b.classList.toggle("on",i==j))}
+async function api(u,b){const r=await fetch(u,b?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}:{});const d=await r.json();if(d.error)throw new Error(d.error);return d}
+function el(t,txt,c){const e=document.createElement(t);if(txt!==undefined)e.textContent=txt;if(c)e.className=c;return e}
+const tiempos=[];function reg(c,o,ms,det){tiempos.push([c,o,ms,det]);const t=$("#tt");const r=t.insertRow();[c,o,ms>=1000?(ms/1000).toFixed(1)+" s":ms+" ms",det||""].forEach(v=>r.insertCell().textContent=v)}
+
+async function verificar(){const b=$("#bv");b.disabled=true;const c=$("#chips");c.replaceChildren();
+ ["Kafka","Cassandra","Neo4j","AWS","S3","Athena","Spark"].forEach(n=>{const e=el("div","","chip wait");e.append(el("b",n),el("small","verificando…"));c.append(e)});
+ try{const d=await api("/api/estado");c.replaceChildren();d.forEach(s=>{const e=el("div","","chip "+(s.ok?"ok":"bad"));e.append(el("b",(s.ok?"● ":"✖ ")+s.n),el("small",s.msg));c.append(e)})}catch(e){c.textContent=e.message}b.disabled=false}
+
+function act(ids,on){["n-csv","n-prod","n-kafka","n-cons","n-cass"].forEach(i=>$("#"+i).classList.remove("act"));[1,2,3,4].forEach(i=>$("#f"+i).classList.remove("act"));
+ if(on){ids.forEach(i=>$("#n-"+i).classList.add("act"))}}
+async function flujo(){const b=$("#bf");b.disabled=true;const log=$("#log");log.textContent="";["prod","kafka","cons","cass"].forEach(k=>$("#c-"+k).textContent=k=="prod"||k=="cons"?"0":"–");$("#resflujo").style.display="none";
+ let k0=null;try{k0=(await api("/api/escala")).kafka?.v}catch(e){}
+ let rate="";
+ const es=new EventSource(`/api/flujo?filas=${$("#filas").value}&patron=${encodeURIComponent($("#pat").value)}`);
+ es.onmessage=async ev=>{const m=JSON.parse(ev.data);
+  if(m.estado=="inicio"){act(m.etapa=="productor"?["csv","prod","kafka"]:["kafka","cons","cass"],true);document.querySelectorAll(".fl").forEach((f,i)=>f.classList.toggle("act",m.etapa=="productor"?i<3:i>1))}
+  if(m.linea!==undefined){log.textContent+=m.linea+"\n";log.scrollTop=log.scrollHeight;let x;
+   if(x=m.linea.match(/acumulado: [\d.,]+ filas -> ([\d.,]+) eventos/))$("#c-prod").textContent=x[1];
+   if(x=m.linea.match(/Listo: .* ([\d.,]+) eventos publicados en ([\d.]+) s \(([\d.,]+) eventos\/s\)/)){$("#c-prod").textContent=x[1];rate=`Productor: ${x[1]} eventos en ${x[2]} s (${x[3]} ev/s)`;reg("Kafka","Productor → tópico",Math.round(x[2]*1000),rate)}
+   if(x=m.linea.match(/^([\d.,]+) eventos escritos/))$("#c-cons").textContent=x[1];
+   if(x=m.linea.match(/Total escrito: ([\d.,]+) eventos en ([\d.]+) s/)){$("#c-cons").textContent=x[1];reg("Cassandra","Consumidor → 3 tablas",Math.round(x[2]*1000),x[1]+" eventos")}}
+  if(m.estado=="fin"&&m.codigo!==0){log.textContent+=`\n✖ ${m.etapa} terminó con código ${m.codigo}\n`}
+  if(m.fin){es.close();act([],false);
+   try{const d=await api("/api/escala");if(d.kafka.v!==undefined)$("#c-kafka").textContent=k0!=null?fmt(d.kafka.v-k0):fmt(d.kafka.v);
+    if(d.cassandra.v){const t=Object.values(d.cassandra.v);$("#c-cass").textContent=fmt(t.reduce((a,b)=>a+b,0));reg("Cassandra","COUNT(*) en 3 tablas",d.cassandra.ms,t.map(fmt).join(" / ")+" filas")}}catch(e){}
+   const r=$("#resflujo");r.style.display="block";r.textContent="Los datos pasaron por Productor → Kafka → Consumidor → Cassandra. "+rate+". Repetirlo no duplica filas porque event_id es determinista.";b.disabled=false}};
+ es.onerror=()=>{es.close();act([],false);b.disabled=false}}
+
+const Q=[
+ {g:"Cassandra · CQL",t:"Eventos de un aeropuerto en una ventana",api:"/api/cql",q:"aeropuerto",f:[["airport","Aeropuerto","ATL"],["dia","Día (UTC)","2026-01-15"],["h1","Hora inicio","12"],["h2","Hora fin","14"]],ej:true,
+  txt:"SELECT event_ts, event_type, carrier, flight_number, tail_number, delay_minutes\nFROM eventos_por_aeropuerto_dia\nWHERE airport = '{airport}' AND day = '{dia}'\n  AND event_ts >= '{dia} {h1}:00' AND event_ts < '{dia} {h2}:00';",
+  exp:"La partición es (airport, day): Cassandra lee una sola partición y resuelve la ventana con un rango sobre event_ts. Por eso no hay escaneo de toda la tabla."},
+ {g:"Cassandra · CQL",t:"Historial de un número de vuelo",api:"/api/cql",q:"vuelo",f:[["carrier","Aerolínea","OO"],["numero","Número","6496"]],
+  txt:"SELECT event_ts, event_type, origin, dest, delay_minutes\nFROM eventos_por_vuelo\nWHERE carrier = '{carrier}' AND flight_number = {numero} LIMIT 20;",
+  exp:"Tabla pensada para esta consulta: la clave (carrier, flight_number) agrupa el historial del vuelo en una partición pequeña."},
+ {g:"Cassandra · CQL",t:"Rotación de una aeronave",api:"/api/cql",q:"aeronave",f:[["tail","Matrícula","N710SK"],["month","Mes","2026-01"]],
+  txt:"SELECT event_ts, event_type, origin, dest, delay_minutes\nFROM eventos_por_aeronave_mes\nWHERE tail_number = '{tail}' AND month = '{month}';",
+  exp:"Sale en orden cronológico (clustering ASC): se ve la cadena de vuelos de la aeronave, que es la base de la herencia del retraso. El cubo month evita que la partición crezca sin límite."},
+ {g:"Neo4j · Cypher",t:"Aeropuertos más centrales (PageRank)",api:"/api/cypher",q:"pagerank",f:[],
+  txt:"MATCH (a:Airport)\nRETURN a.iata AS aeropuerto, round(a.pagerank, 4) AS pagerank,\n       round(a.intermediacion, 1) AS intermediacion, a.salidas, a.retraso_salida_prom\nORDER BY a.pagerank DESC LIMIT 10;",
+  exp:"PageRank ponderado por vuelos e intermediación calculados con Graph Data Science. ORD, DEN y DFW encabezan la red."},
+ {g:"Neo4j · Cypher",t:"Efecto de cerrar un aeropuerto",api:"/api/cypher",q:"cierre",f:[["cerrado","Aeropuerto cerrado","DFW"]],
+  txt:"MATCH (a:Airport {iata: '{cerrado}'})-[r:ROUTE]-() ... // tráfico afectado\nMATCH (a:Airport)\nWHERE a.iata <> '{cerrado}' AND NOT EXISTS\n  { MATCH (a)-[:ROUTE]-(b:Airport) WHERE b.iata <> '{cerrado}' }\nRETURN count(a) AS aeropuertos_aislados;",
+  exp:"Compara impacto en tráfico con dependencia estructural: prueba DFW (aísla ≈19 aeropuertos) frente a ATL (≈1). ATL toca tanto tráfico, pero su red se redistribuye."},
+ {g:"S3 + Athena · SQL",t:"Total de vuelos por mes",api:"/api/athena",q:"total",f:[],
+  txt:"SELECT mes, count(*) AS vuelos\nFROM reto7.vuelos\nGROUP BY ROLLUP(mes) ORDER BY mes;",
+  exp:"Athena lee los Parquet de S3 sin copiarlos. El total debe ser 4 620 415, igual que en Spark: la carga no perdió ni duplicó filas."},
+ {g:"S3 + Athena · SQL",t:"Herencia del retraso por tramo del día",api:"/api/athena",q:"tramo",f:[],
+  txt:"SELECT tramo_del_dia, count(*) AS vuelos, round(avg(dep_delay_new),2) AS retraso_salida_prom_min,\n       round(100.0*sum(heredado)/nullif(sum(dep_delay_new),0),2) AS pct_heredado\nFROM reto7.vuelos WHERE tramo_del_dia <= 8\nGROUP BY tramo_del_dia ORDER BY tramo_del_dia;",
+  exp:"El retraso se acumula: de ≈1,3 % heredado en el primer tramo a ≈44,9 % en el séptimo (supuesto: 30 min mínimos en tierra)."},
+ {g:"S3 + Athena · SQL",t:"Retraso por franja horaria",api:"/api/athena",q:"franja",f:[],
+  txt:"SELECT CASE WHEN hora_salida BETWEEN 0 AND 5 THEN '1 Madrugada' ... END AS franja,\n       count(*) AS vuelos, round(avg(dep_delay_new),2), round(avg(arr_delay_new),2)\nFROM reto7.vuelos GROUP BY 1 ORDER BY 1;",
+  exp:"El retraso crece durante el día: coherente con la acumulación por rotaciones."},
+ {g:"S3 + Athena · SQL",t:"Mediana y percentil 90 por aerolínea",api:"/api/athena",q:"p90",f:[],
+  txt:"SELECT op_unique_carrier, count(*) AS vuelos,\n       approx_percentile(arr_delay_new,0.5) AS mediana, approx_percentile(arr_delay_new,0.9) AS p90\nFROM reto7.vuelos GROUP BY 1 ORDER BY p90 DESC;",
+  exp:"El promedio esconde la cola larga: se comparan mediana y percentil 90 sobre 4,6 millones de filas."}];
+let cur=0;
+function pintaLista(){const l=$("#lista");l.replaceChildren();let g="";Q.forEach((q,i)=>{if(q.g!=g){g=q.g;l.append(el("h4",g))}const b=el("button",q.t,i==cur?"on":"");b.onclick=()=>{cur=i;pintaLista();pintaQ()};l.append(b)})}
+function valores(){const v={};Q[cur].f.forEach(([k])=>v[k]=($("#i-"+k)||{}).value||"");return v}
+function txt(){let s=Q[cur].txt;const v=valores();for(const k in v)s=s.split("{"+k+"}").join(v[k]);$("#qtxt").textContent=s}
+function pintaQ(){const q=Q[cur];$("#qt").textContent=q.t;const c=$("#campos");c.replaceChildren();
+ q.f.forEach(([k,n,d])=>{const L=el("label",n+" ");const i=el("input");i.id="i-"+k;i.value=d;i.oninput=txt;L.append(i);c.append(L)});
+ if(q.ej){const b=el("button","Usar ejemplo real","sec");b.onclick=async()=>{try{const d=await api("/api/cql/ejemplo");$("#i-airport").value=d.airport;$("#i-dia").value=d.dia;$("#i-h1").value=0;$("#i-h2").value=24;txt()}catch(e){$("#qinfo").textContent=e.message}};c.append(b)}
+ txt();$("#res").replaceChildren();$("#qinfo").textContent="";$("#qexp").textContent=q.exp}
+async function ejecutar(){const q=Q[cur],b=$("#bq");b.disabled=true;$("#qinfo").textContent=q.api=="/api/athena"?"ejecutando en Athena…":"ejecutando…";$("#res").replaceChildren();
+ try{const d=await api(q.api,{q:q.q,...valores()});const t=el("table");const h=t.insertRow();d.cols.forEach(c=>{const th=el("th",c);h.append(th)});d.rows.forEach(r=>{const tr=t.insertRow();r.forEach(v=>tr.insertCell().textContent=v)});
+  $("#res").append(t);const ms=d.ms??0;let det=d.rows.length+" filas";
+  if(d.bytes!==undefined){det+=` · Athena escaneó ${(d.bytes/1e6).toFixed(1)} MB de 45,3 MB`}
+  $("#qinfo").textContent=`${d.rows.length} filas en ${ms>=1000?(ms/1000).toFixed(1)+" s":ms+" ms"}`+(d.bytes!==undefined?` · escaneó ${(d.bytes/1e6).toFixed(1)} MB`:"");
+  reg(q.g.split(" ")[0],q.t,ms,det)}catch(e){const s=el("div",e.message,"err");$("#res").append(s);$("#qinfo").textContent=""}b.disabled=false}
+
+async function escala(){const b=$("#be");b.disabled=true;const k=$("#kpis");k.replaceChildren();
+ const add=(t,v,s)=>{const d=el("div","","kpi");d.append(el("div",t),el("i",v),el("small",s||""));k.append(d)};
+ try{const d=await api("/api/escala");
+  add("Kafka · mensajes en flight-events",d.kafka.v!==undefined?fmt(d.kafka.v):"error",d.kafka.error||"conteo en "+d.kafka.ms+" ms");
+  if(d.cassandra.v){Object.entries(d.cassandra.v).forEach(([t,n])=>add("Cassandra · "+t.replace("eventos_por_",""),fmt(n),"filas"));reg("Cassandra","COUNT(*) en 3 tablas",d.cassandra.ms,"")}else add("Cassandra","error",d.cassandra.error);
+  if(d.neo4j.v)add("Neo4j · red de aeropuertos",fmt(d.neo4j.v.aeropuertos)+" / "+fmt(d.neo4j.v.rutas),"aeropuertos / rutas");else add("Neo4j","error",d.neo4j.error)}catch(e){k.textContent=e.message}
+ try{const a=await api("/api/athena",{q:"total"});const tot=a.rows[a.rows.length-1][1];add("Athena · vuelos en S3 (Parquet)",fmt(tot),`${a.ms} ms · escaneó ${(a.bytes/1e6).toFixed(1)} MB de 45,3 MB`);reg("Athena","Total de vuelos",a.ms,"escaneó "+(a.bytes/1e6).toFixed(1)+" MB")}catch(e){add("Athena","error",e.message)}
+ b.disabled=false}
+pintaLista();pintaQ();verificar();
+</script></html>
