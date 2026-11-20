@@ -17,7 +17,7 @@ CSV BTS ──► productor Kafka ──► tópico flight-events ──► cons
    │                                                                          
    ├──► Spark (herencia de retraso por aeronave; GraphFrames opcional)
    ├──► Neo4j (aeropuertos y rutas, PageRank, intermediación, cierre de aeropuerto)
-   └──► S3 (Parquet) ──► BigQuery / Snowflake (retraso por aerolínea, franja, mes, aeropuerto)
+   └──► S3 (Parquet) ──► Athena (SQL sobre S3: retraso por aerolínea, franja, mes, aeropuerto)
 ```
 | Componente | Por qué | Alternativa descartada |
 |---|---|---|
@@ -25,13 +25,13 @@ CSV BTS ──► productor Kafka ──► tópico flight-events ──► cons
 | Cassandra | Escritura masiva y consultas por clave conocida (aeropuerto+día, vuelo, matrícula) | PostgreSQL: más difícil de escalar horizontalmente para este patrón |
 | Spark | Ventanas sobre millones de filas (`lag` por aeronave) | pandas: no escala |
 | Neo4j | Centralidad y caminos alternativos sobre la red de rutas | Cassandra: sin recorridos de grafo |
-| S3 + BigQuery/Snowflake | Histórico barato y análisis agregado en SQL | — |
+| S3 + Athena | Histórico barato y análisis agregado en SQL sin mover datos | BigQuery/Snowflake: piden otra cuenta y copiar los datos |
 
 ## Estado
 - [x] Fase 1: Kafka + Cassandra (ingesta, modelo, consultas)
 - [x] Fase 2: Spark — herencia de retraso (`spark/herencia_retraso.py`)
 - [~] Fase 3: grafo — prototipo en NetworkX (`grafo/`) y scripts de Neo4j + GDS (`neo4j/`), pendiente de ejecutar
-- [~] Fase 4: S3 (script listo, `analitica/subir_s3.py`) + BigQuery/Snowflake (pendiente)
+- [~] Fase 4: S3 subido (`analitica/subir_s3.py`); análisis con Athena (`analitica/athena_analisis.sql`, sin probar)
 
 ## Requisitos
 Docker Desktop, Python 3.11 (el driver de Cassandra aún da problemas en 3.12+), 8 GB de RAM libres.
@@ -123,6 +123,12 @@ $env:AWS_ACCESS_KEY_ID="..."; $env:AWS_SECRET_ACCESS_KEY="..."; $env:AWS_SESSION
 python -m analitica.subir_s3 --bucket reto7-retrasos-TUNOMBRE-2026 --origen data/salida_8meses/vuelos_compacto --prefijo vuelos_enriquecidos --crear-bucket
 python -m analitica.subir_s3 --bucket reto7-retrasos-TUNOMBRE-2026 --prefijo vuelos_enriquecidos --listar
 ```
+
+### Análisis sobre S3 con Athena
+Abre `analitica/athena_analisis.sql` en la consola de Athena (región us-east-2) y ejecútalo sentencia por sentencia.
+Crea una tabla externa sobre los Parquet de S3 (sin copiar datos) y resuelve el análisis por aerolínea, franja
+horaria, mes y aeropuerto. El reto menciona BigQuery o Snowflake como motor de análisis; usar Athena es una
+alternativa que debe confirmarse con el docente.
 
 ## Modelo de Cassandra (derivado de las consultas)
 | Consulta | Tabla | Partición | Clustering |
