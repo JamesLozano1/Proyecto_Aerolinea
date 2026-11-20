@@ -31,7 +31,7 @@ CSV BTS ──► productor Kafka ──► tópico flight-events ──► cons
 - [x] Fase 1: Kafka + Cassandra (ingesta, modelo, consultas)
 - [x] Fase 2: Spark — herencia de retraso (`spark/herencia_retraso.py`)
 - [~] Fase 3: grafo — prototipo en NetworkX (`grafo/`) y scripts de Neo4j + GDS (`neo4j/`), pendiente de ejecutar
-- [ ] Fase 4: S3 + BigQuery/Snowflake
+- [~] Fase 4: S3 (script listo, `analitica/subir_s3.py`) + BigQuery/Snowflake (pendiente)
 
 ## Requisitos
 Docker Desktop, Python 3.11 (el driver de Cassandra aún da problemas en 3.12+), 8 GB de RAM libres.
@@ -107,6 +107,22 @@ docker exec reto7-neo4j cypher-shell -u neo4j -p reto7password --format plain --
 ```
 Requiere haber corrido antes `python -m grafo.preparar_grafo` (genera `data/grafo/nodos.csv` y `aristas.csv`).
 Navegador de Neo4j: http://localhost:7474 (usuario `neo4j`).
+
+## Fase 4 — Histórico en S3
+1. Compacta el Parquet (Spark deja muchos archivos pequeños; esto no recalcula nada):
+```powershell
+docker exec reto7-spark-master /opt/spark/bin/spark-submit --master local[2] --driver-memory 2g /opt/app/spark/compactar_parquet.py --entrada /data/salida_8meses/vuelos_enriquecidos --salida /data/salida_8meses/vuelos_compacto
+```
+2. Credenciales de la cuenta educativa (AWS Academy: *AWS Details* → *AWS CLI: Show*). Son temporales: hay que
+   repetirlo en cada sesión y **nunca** subirlas al repositorio ni compartirlas.
+```powershell
+$env:AWS_ACCESS_KEY_ID="..."; $env:AWS_SECRET_ACCESS_KEY="..."; $env:AWS_SESSION_TOKEN="..."; $env:AWS_DEFAULT_REGION="us-east-1"
+```
+3. Subir (el nombre del bucket debe ser único en todo AWS):
+```powershell
+python -m analitica.subir_s3 --bucket reto7-retrasos-TUNOMBRE-2026 --origen data/salida_8meses/vuelos_compacto --prefijo vuelos_enriquecidos --crear-bucket
+python -m analitica.subir_s3 --bucket reto7-retrasos-TUNOMBRE-2026 --prefijo vuelos_enriquecidos --listar
+```
 
 ## Modelo de Cassandra (derivado de las consultas)
 | Consulta | Tabla | Partición | Clustering |

@@ -99,7 +99,8 @@ def main():
         "tramo_del_dia", "DEP_DELAY_NEW", "ARR_DELAY_NEW", "ARR_DEL15", "LATE_AIRCRAFT_DELAY",
         "vinculo", "gap_tierra_min", "heredado")
     ruta_parquet = f"{args.salida}/vuelos_enriquecidos"
-    enriquecido.write.mode("overwrite").partitionBy("mes").parquet(ruta_parquet)
+    # repartition("mes") evita cientos de archivos pequeños: queda ~1 archivo por mes
+    enriquecido.repartition("mes").write.mode("overwrite").partitionBy("mes").parquet(ruta_parquet)
 
     # ---- Agregaciones (se lee lo escrito para no recalcular la cadena) ----------------
     v = spark.read.parquet(ruta_parquet)
