@@ -4,6 +4,8 @@ Salida (data/grafo/):
   nodos.csv   iata, ciudad, nombre, lat, lon, salidas, llegadas, retraso_salida_prom
   aristas.csv origen, destino, vuelos, cancelados, desviados, retraso_salida_prom, retraso_llegada_prom, distancia
 
+Con --min-vuelos se descartan las rutas casi inexistentes (1 o 2 vuelos en meses), que de otro modo
+cuentan igual que un enlace con cientos de vuelos y hacen que la red parezca más conectada de lo que es.
 Se lee por bloques para no cargar millones de filas en memoria. No requiere Docker.
 Uso: python -m grafo.preparar_grafo --archivos "data/bts/2026/*.csv"
 """
@@ -34,6 +36,8 @@ def main():
     ap.add_argument("--archivos", required=True)
     ap.add_argument("--openflights", default="data/openflights/airports.dat")
     ap.add_argument("--salida", default="data/grafo")
+    ap.add_argument("--min-vuelos", type=int, default=0,
+                    help="descarta rutas con menos de N vuelos operados (no cancelados) en el periodo")
     args = ap.parse_args()
 
     archivos = sorted(glob.glob(args.archivos))
@@ -59,6 +63,10 @@ def main():
         dep_sum=("dep_sum", "sum"), dep_n=("dep_n", "sum"), arr_sum=("arr_sum", "sum"),
         arr_n=("arr_n", "sum"), distancia=("distancia", "max"))
     a = a[a["ORIGIN"] != a["DEST"]]
+    if args.min_vuelos > 0:
+        antes = len(a)
+        a = a[(a["vuelos"] - a["cancelados"]) >= args.min_vuelos]
+        print(f"Filtro --min-vuelos {args.min_vuelos}: {antes - len(a)} rutas descartadas de {antes}")
     a["retraso_salida_prom"] = (a["dep_sum"] / a["dep_n"].replace(0, np.nan)).round(2)
     a["retraso_llegada_prom"] = (a["arr_sum"] / a["arr_n"].replace(0, np.nan)).round(2)
 

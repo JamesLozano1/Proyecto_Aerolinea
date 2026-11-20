@@ -8,7 +8,7 @@ obtienen en Neo4j con Graph Data Science. Entrada: data/grafo/nodos.csv y arista
 - Intermediación (betweenness) sobre saltos: cuántos caminos mínimos entre otros pares pasan por él.
 - Cierre: se elimina el aeropuerto y se mide cuántos pares origen-destino dejan de ser alcanzables,
   cuánto aumentan los saltos promedio y qué porción del tráfico desaparece.
-- Rutas alternativas: caminos más cortos entre dos aeropuertos sin usar la ruta directa.
+- Rutas alternativas: sin usar la ruta directa; se ordenan por saltos y luego por la capacidad (vuelos) de su tramo más débil.
 """
 import argparse
 from pathlib import Path
@@ -61,22 +61,25 @@ def efecto_cierre(G, nodo):
         "saltos_prom_despues": round(des_saltos / des_pares, 3) if des_pares else None,
         "pct_trafico_afectado": round(100 * trafico_nodo / total_vuelos, 2),
         "aeropuertos_aislados": len(aislados),
+        "lista_aislados": " ".join(sorted(aislados)),
         "pct_en_mayor_componente": round(100 * mayor / H.number_of_nodes(), 2),
     }
 
 
-def rutas_alternativas(G, origen, destino, k=3):
+def rutas_alternativas(G, origen, destino, k=3, max_saltos=3):
+    """Mejores k rutas sin la ruta directa: menos saltos primero y, a igual número de saltos,
+    mayor capacidad (vuelos del tramo más débil). Devuelve [(camino, vuelos_tramo_debil)]."""
     H = G.copy()
     if H.has_edge(origen, destino):
         H.remove_edge(origen, destino)
-    if origen not in H or destino not in H or not nx.has_path(H, origen, destino):
+    if origen not in H or destino not in H:
         return []
-    rutas = []
-    for camino in nx.shortest_simple_paths(H, origen, destino):
-        rutas.append(camino)
-        if len(rutas) == k:
-            break
-    return rutas
+    candidatas = []
+    for camino in nx.all_simple_paths(H, origen, destino, cutoff=max_saltos):
+        capacidad = min(H[u][v]["vuelos"] for u, v in zip(camino, camino[1:]))
+        candidatas.append((len(camino) - 1, -capacidad, camino))
+    candidatas.sort()
+    return [(c, -cap) for _, cap, c in candidatas[:k]]
 
 
 def main():
@@ -104,7 +107,10 @@ def main():
 
     cierres = pd.DataFrame([efecto_cierre(G, n) for n in cent["iata"].head(args.top)])
     print(f"\n=== CIERRE DE AEROPUERTO (top {args.top} por PageRank) ===")
-    print(cierres.to_string(index=False))
+    print(cierres.drop(columns="lista_aislados").to_string(index=False))
+    print("\nAeropuertos que quedan sin ninguna ruta al cerrar cada uno:")
+    for r in cierres.itertuples():
+        print(f"  {r.aeropuerto_cerrado}: {r.lista_aislados or '(ninguno)'}")
 
     if args.par:
         pares = [tuple(args.par)]
@@ -114,9 +120,10 @@ def main():
     print("\n=== RUTAS ALTERNATIVAS (sin la ruta directa) ===")
     for o, d in pares:
         rutas = rutas_alternativas(G, o, d)
-        for i, r in enumerate(rutas, 1):
-            alt.append({"origen": o, "destino": d, "alternativa": i, "saltos": len(r) - 1, "ruta": " > ".join(r)})
-            print(f"{o}->{d} alt {i} ({len(r) - 1} saltos): {' > '.join(r)}")
+        for i, (r, cap) in enumerate(rutas, 1):
+            alt.append({"origen": o, "destino": d, "alternativa": i, "saltos": len(r) - 1,
+                        "ruta": " > ".join(r), "vuelos_tramo_debil": cap})
+            print(f"{o}->{d} alt {i} ({len(r) - 1} saltos, tramo más débil {cap} vuelos): {' > '.join(r)}")
         if not rutas:
             print(f"{o}->{d}: sin alternativa")
 

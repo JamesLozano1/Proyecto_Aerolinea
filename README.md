@@ -30,7 +30,7 @@ CSV BTS ──► productor Kafka ──► tópico flight-events ──► cons
 ## Estado
 - [x] Fase 1: Kafka + Cassandra (ingesta, modelo, consultas)
 - [x] Fase 2: Spark — herencia de retraso (`spark/herencia_retraso.py`)
-- [~] Fase 3: grafo — prototipo en NetworkX listo (`grafo/`); falta cargarlo y repetirlo en Neo4j
+- [~] Fase 3: grafo — prototipo en NetworkX (`grafo/`) y scripts de Neo4j + GDS (`neo4j/`), pendiente de ejecutar
 - [ ] Fase 4: S3 + BigQuery/Snowflake
 
 ## Requisitos
@@ -85,15 +85,28 @@ Limitación: el mínimo de 30 min en tierra es un supuesto (parámetro `--turnar
 ## Fase 3 — Grafo de aeropuertos (sin Docker)
 ```powershell
 pip install -r requirements.txt
-python -m grafo.preparar_grafo --archivos "data/bts/2026/*.csv"
+python -m grafo.preparar_grafo --archivos "data/bts/2026/*.csv" --min-vuelos 100
 python -m grafo.analisis_grafo --top 10
 ```
-`preparar_grafo` resume los CSV en `data/grafo/nodos.csv` y `aristas.csv` (aeropuertos y rutas con vuelos y retraso
+`--min-vuelos 100` descarta las rutas con menos de 100 vuelos operados en los 8 meses (unas 3 por semana); sin el filtro, rutas casi inexistentes cuentan igual que enlaces muy transitados. `preparar_grafo` resume los CSV en `data/grafo/nodos.csv` y `aristas.csv` (aeropuertos y rutas con vuelos y retraso
 promedio). `analisis_grafo` calcula PageRank (ponderado por vuelos), intermediación, el efecto de cerrar cada uno de
 los aeropuertos más importantes y las rutas alternativas sin la ruta directa. Salida en `data/salida/grafo/`.
 Al interpretar el cierre, mira siempre `pares_perdidos`: los saltos promedio pueden bajar porque solo quedan los
 pares cercanos que siguen conectados.
 Estos resultados sirven para validar lo que luego calcule Neo4j con Graph Data Science.
+
+### Neo4j + Graph Data Science
+```powershell
+docker compose up -d neo4j
+docker logs reto7-neo4j --tail 20          # esperar el mensaje "Started."
+docker exec reto7-neo4j cypher-shell -u neo4j -p reto7password -f /scripts/00_comprobar.cypher
+docker exec reto7-neo4j cypher-shell -u neo4j -p reto7password --format plain -f /scripts/01_cargar.cypher
+docker exec reto7-neo4j cypher-shell -u neo4j -p reto7password --format plain -f /scripts/02_centralidad.cypher
+docker exec reto7-neo4j cypher-shell -u neo4j -p reto7password --format plain --param "cerrado => 'ATL'" -f /scripts/03_cierre.cypher
+docker exec reto7-neo4j cypher-shell -u neo4j -p reto7password --format plain --param "origen => 'JFK'" --param "destino => 'LAX'" --param "cerrado => 'ORD'" --param "min_vuelos => 100" -f /scripts/04_alternativas.cypher
+```
+Requiere haber corrido antes `python -m grafo.preparar_grafo` (genera `data/grafo/nodos.csv` y `aristas.csv`).
+Navegador de Neo4j: http://localhost:7474 (usuario `neo4j`).
 
 ## Modelo de Cassandra (derivado de las consultas)
 | Consulta | Tabla | Partición | Clustering |
